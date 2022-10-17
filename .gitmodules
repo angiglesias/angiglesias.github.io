@@ -1,0 +1,3 @@
+[submodule "themes/terminal"]
+	path = themes/terminal
+	url = git@github.com:angiglesias/hugo-theme-terminal.git

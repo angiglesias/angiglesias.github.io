@@ -1,0 +1,23 @@
+.post-cover {
+    margin: 40px auto;
+    /* max-width: 0%; */
+}
+
+.footer {
+    padding: 20px;
+}
+
+.footer__inner {
+    justify-content: center;
+    align-items: center;
+}
+
+.social-footer {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.social-footer-icons {
+    font-size: 24px;
+}
