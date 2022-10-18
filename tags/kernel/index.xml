@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>kernel on Angel</title><link>/tags/kernel/</link><description>Recent content in kernel on Angel</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sat, 01 Oct 2022 00:00:00 +0000</lastBuildDate><atom:link href="/tags/kernel/index.xml" rel="self" type="application/rss+xml"/><item><title>Playing around with a BMP388 or my first Linux Kernel contribution</title><link>/posts/bmp388/</link><pubDate>Sat, 01 Oct 2022 00:00:00 +0000</pubDate><guid>/posts/bmp388/</guid><description>How it began I started looking with a friend in building a small, advanced GPS tracker to use in canoeing. We wanted something with low power consumption and a easy framework to develop a small proof-of-concept quickly. We discovered this awesome 4-in-one board from Ozzmaker that provided a full featured IMU.
+An IMU, Inertial Measurement Unit is a device used to record navigational information that can be used later to compute the position of a body.</description><content>&lt;h1 id="how-it-began">How it began&lt;/h1>
+&lt;p>I started looking with a friend in building a small, advanced GPS tracker to use in canoeing.
+We wanted something with low power consumption and a easy framework to develop a small proof-of-concept
+quickly. We discovered this &lt;a href="https://ozzmaker.com/product/berrygps-imu/">awesome 4-in-one board from Ozzmaker&lt;/a>
+that provided a full featured IMU.&lt;/p>
+&lt;p>An IMU, &lt;em>Inertial Measurement Unit&lt;/em> is a device used to record navigational
+information that can be used later to compute the position of a body.
+When an IMU, like this one, has GPS capabilities, allows for greater precision and
+filling the gaps when GPS lock is lost. This IMU unit contains the following sensors:&lt;/p>
+&lt;ul>
+&lt;li>An satellite multifrequency global positioning system from u-blox, which provides main positioning and navigation data (u-blox M8).&lt;/li>
+&lt;li>A high precision gyroscope + acceleromenter bundle, providing orientation and aceleration vectors (6-axis) (&lt;a href="https://www.st.com/en/mems-and-sensors/lsm6dsl.html">STMicro LSM6DSL&lt;/a>).&lt;/li>
+&lt;li>A high precision magnetometer providing orientation relative to earth magnetic field (3-axis) (&lt;a href="https://www.st.com/en/mems-and-sensors/lis3mdl.html">STMicro LIS3MDL&lt;/a>).&lt;/li>
+&lt;li>A high resolution barometric sensor, which records temperature and atmosferic pressure (&lt;a href="https://www.bosch-sensortec.com/products/environmental-sensors/pressure-sensors/bmp388/">Bosch BMP388&lt;/a>)&lt;/li>
+&lt;/ul>
+&lt;p>All this sensors were supported in Linux kernel through the &lt;a href="https://www.kernel.org/doc/html/latest/driver-api/iio/intro.html">Industrial I/O Subsystem (IIO)&lt;/a>
+but the BMP388. After a little bit of reading I discovered that the previous
+generation of the sensors were supported and, in my blissful ignorance, I thought,
+how hard could be to extend this driver to support the new sensors?&lt;/p>
+&lt;h1 id="extending-the-driver">Extending the driver&lt;/h1>
+&lt;p>I had previous experience messing with kernel components and drivers at work,
+from extending a intel network card driver with some cursed hacks to enable
+a weird custom configuration to putting together a driver for a Sony CMOS sensor
+with some outdated god-knows-where-it-came-from datasheets.
+But those were quick-and-dirty attemps that, thankfully, never saw the light outside
+a small engineering team. This time was the real deal, extending an existing driver
+in the kernel and submitting the patches to the kernel mailing list.&lt;/p>
+&lt;p>With the datasheets from previous generations of sensors it was easy to follow
+the driver logic and draw parallels with how the new sensor operated.
+Taking the basics first, the sensor control interface provides a series of
+registers to write and read data. These registers are accessible through
+I2C and SPI interfaces. There are two types of registers:&lt;/p>
+&lt;ul>
+&lt;li>&lt;strong>read/write registers&lt;/strong>, reserved to configure sensor operation, will store the data set by host.&lt;/li>
+&lt;li>&lt;strong>read only registers&lt;/strong>, that will contain various parameters exposed from the sensor, from flags to the raw data harvested in the sensor.
+Bits from these registers can be volatile and will reset to default values after reading their content.&lt;/li>
+&lt;/ul>
+&lt;p>All registers are 8-bit words wide.&lt;/p>
+&lt;h2 id="sensor-operation">Sensor operation&lt;/h2>
+&lt;p>As happened with previous versions of the sensors, the data read on the sensor
+needs to be compensated following and algorithm fed with calibration data
+available on a reserved memory region. The region consists of 21 contiguous
+registers starting on address 0x49 to 0x69. This compensation parameters are
+comprised of signed and unsigned values of byte and two byte sizes:&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th style="text-align:center">Parameter&lt;/th>
+&lt;th style="text-align:center">Type&lt;/th>
+&lt;th style="text-align:center">Address (high,low)&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td style="text-align:center">T1&lt;/td>
+&lt;td style="text-align:center">uint16&lt;/td>
+&lt;td style="text-align:center">0x32,0x31&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">T2&lt;/td>
+&lt;td style="text-align:center">uint16&lt;/td>
+&lt;td style="text-align:center">0x34,0x33&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">T3&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x35&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P1&lt;/td>
+&lt;td style="text-align:center">int16&lt;/td>
+&lt;td style="text-align:center">0x37,0x36&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P2&lt;/td>
+&lt;td style="text-align:center">int16&lt;/td>
+&lt;td style="text-align:center">0x39,0x38&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P3&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x3A&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P4&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x3B&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P5&lt;/td>
+&lt;td style="text-align:center">uint16&lt;/td>
+&lt;td style="text-align:center">0x3D,0x3C&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P6&lt;/td>
+&lt;td style="text-align:center">uint16&lt;/td>
+&lt;td style="text-align:center">0x3F,0x3E&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P7&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x40&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P8&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x41&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P9&lt;/td>
+&lt;td style="text-align:center">int16&lt;/td>
+&lt;td style="text-align:center">0x43,0x42&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P10&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x44&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td style="text-align:center">P11&lt;/td>
+&lt;td style="text-align:center">int8&lt;/td>
+&lt;td style="text-align:center">0x45&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>After a power-on reset, to operate the sensor, a series of operation parameters
+need to be configured:&lt;/p>
+&lt;ul>
+&lt;li>Operation Mode&lt;/li>
+&lt;li>Oversampling (OSR)&lt;/li>
+&lt;li>Output data rate (ODR)&lt;/li>
+&lt;li>IIR filter&lt;/li>
+&lt;/ul>
+&lt;p>Additionally, the sensor has advanced capabilities such as interruptions and
+FIFO measurements buffer not considered through this post.&lt;/p>
+&lt;h3 id="sensor-initialization">Sensor initialization&lt;/h3>
+&lt;p>After a power-on-reset, the sensor is soft-reset issuing the reset command to
+the CMD registry. After that the operation parameters will be set to default values.
+During the different patch revisions, the initialization code suffered various changes.
+At first it looked like this:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">bmp380_chip_config&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> bmp280_data &lt;span style="color:#f92672">*&lt;/span>data)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> u8 osrs;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">int&lt;/span> tmp;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">int&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* configure power control register */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_write_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_POWER_CONTROL,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_CTRL_SENSORS_MASK &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_MODE_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_CTRL_SENSORS_PRESS_EN &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_CTRL_SENSORS_TEMP_EN &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_MODE_NORMAL);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret &lt;span style="color:#f92672">&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#e6db74">&amp;#34;failed to write operation control register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* configure oversampling */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> osrs &lt;span style="color:#f92672">=&lt;/span> BMP380_OSRS_TEMP_X(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>oversampling_temp) &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_OSRS_PRESS_X(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>oversampling_press);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_write_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_OSR,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_OSRS_TEMP_MASK &lt;span style="color:#f92672">|&lt;/span> BMP380_OSRS_PRESS_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> osrs);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret &lt;span style="color:#f92672">&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to write oversampling register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* configure output data rate */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_write_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_ODR,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_ODRS_MASK, data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>sampling_freq);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret &lt;span style="color:#f92672">&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to write ODR selection register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* set filter data */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_update_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_CONFIG,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_FILTER_MASK, BMP380_FILTER_3X);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret &lt;span style="color:#f92672">&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to write config register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* startup time wait to verify config */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> usleep_range(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>start_up_time, data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>start_up_time &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">100&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* check config error flag */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_read(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_ERROR, &lt;span style="color:#f92672">&amp;amp;&lt;/span>tmp);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret &lt;span style="color:#f92672">&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#e6db74">&amp;#34;failed to read error register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (tmp &lt;span style="color:#f92672">&amp;amp;&amp;amp;&lt;/span> BMP380_ERR_CONF_MASK) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_warn(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#e6db74">&amp;#34;sensor flagged configuration as incompatible&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">-&lt;/span>EINVAL;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This code would enable temperature and pressure measurements and configure ODR
+and oversampling. One problem found testing this code is that, in some cases,
+the time waiting for config to apply before checking ERROR register is insuficient,
+leaving the sensor in a incorrect state when a imcompatible configuration was applied.
+A incorrect configuration can be a oversampling setting too high leading to a bigger
+integration time than the waiting period between measurements.&lt;/p>
+&lt;p>A revised version of this code fixing this issue would wait the maximum measurement
+time listed on the datasheet. This code also use &lt;code>regmap_update_bits_check&lt;/code> to avoid
+the sensor operation restart when no change is made to the preexisting configuration.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">bmp380_chip_config&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> bmp280_data &lt;span style="color:#f92672">*&lt;/span>data)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">bool&lt;/span> change &lt;span style="color:#f92672">=&lt;/span> false, aux;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">int&lt;/span> tmp;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> u8 osrs;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">int&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Configure power control register */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_update_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_POWER_CONTROL,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_CTRL_SENSORS_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_CTRL_SENSORS_PRESS_EN &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_CTRL_SENSORS_TEMP_EN);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#e6db74">&amp;#34;failed to write operation control register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Configure oversampling */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> osrs &lt;span style="color:#f92672">=&lt;/span> FIELD_PREP(BMP380_OSRS_TEMP_MASK, data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>oversampling_temp) &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> FIELD_PREP(BMP380_OSRS_PRESS_MASK, data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>oversampling_press);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_update_bits_check(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_OSR,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_OSRS_TEMP_MASK &lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_OSRS_PRESS_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> osrs, &lt;span style="color:#f92672">&amp;amp;&lt;/span>aux);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to write oversampling register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> change &lt;span style="color:#f92672">=&lt;/span> change &lt;span style="color:#f92672">||&lt;/span> aux;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Configure output data rate */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_update_bits_check(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_ODR,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_ODRS_MASK, data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>sampling_freq, &lt;span style="color:#f92672">&amp;amp;&lt;/span>aux);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to write ODR selection register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> change &lt;span style="color:#f92672">=&lt;/span> change &lt;span style="color:#f92672">||&lt;/span> aux;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Set filter data */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_update_bits_check(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_CONFIG, BMP380_FILTER_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> FIELD_PREP(BMP380_FILTER_MASK, data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>iir_filter_coeff),
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>aux);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to write config register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> change &lt;span style="color:#f92672">=&lt;/span> change &lt;span style="color:#f92672">||&lt;/span> aux;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (change) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/*
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * The configurations errors are detected on the fly during a measurement
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * cycle. If the sampling frequency is too low, it&amp;#39;s faster to reset
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * the measurement loop than wait until the next measurement is due.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> *
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * Resets sensor measurement loop toggling between sleep and normal
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * operating modes.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_write_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_POWER_CONTROL,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_MODE_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> FIELD_PREP(BMP380_MODE_MASK, BMP380_MODE_SLEEP));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to set sleep mode&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> usleep_range(&lt;span style="color:#ae81ff">2000&lt;/span>, &lt;span style="color:#ae81ff">2500&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_write_bits(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_POWER_CONTROL,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> BMP380_MODE_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> FIELD_PREP(BMP380_MODE_MASK, BMP380_MODE_NORMAL));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev, &lt;span style="color:#e6db74">&amp;#34;failed to set normal mode&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/*
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * Waits for measurement before checking configuration error flag.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * Selected longest measure time indicated in section 3.9.1
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * in the datasheet.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> msleep(&lt;span style="color:#ae81ff">80&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Check config error flag */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ret &lt;span style="color:#f92672">=&lt;/span> regmap_read(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>regmap, BMP380_REG_ERROR, &lt;span style="color:#f92672">&amp;amp;&lt;/span>tmp);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (ret) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_err(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#e6db74">&amp;#34;failed to read error register&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> ret;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (tmp &lt;span style="color:#f92672">&amp;amp;&lt;/span> BMP380_ERR_CONF_MASK) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> dev_warn(data&lt;span style="color:#f92672">-&amp;gt;&lt;/span>dev,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#e6db74">&amp;#34;sensor flagged configuration as incompatible&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#f92672">-&lt;/span>EINVAL;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The Operation Mode can be set to: &lt;code>sleep&lt;/code>, &lt;code>forced&lt;/code> and &lt;code>normal&lt;/code>. Sleep sets
+the sensor to standby, in force mode will make only one measurement and in
+normal sensor takes a measuremt with the frequency set in ODR.
+Oversampling settings will control the resolution of the measurements in combination
+with the noise smoothing provided by the IIR filter. The section 3.5. of the datasheet
+provides more insigths on typical uses and the recommended settings for each scenario.&lt;/p>
+&lt;h2 id="integrating-the-changes">Integrating the changes&lt;/h2>
+&lt;p>The driver already provides support for various sensors: &lt;code>bmp085&lt;/code>, &lt;code>bmp180&lt;/code>,
+&lt;code>bmp280&lt;/code> and &lt;code>bme280&lt;/code>, so it was quite modularized already.
+Integrating the new sensor required adding new IDs to the I2C and SPI match
+tables and a additional regmap definition for the new sensor and integrating
+the new codepath for the actual sensor operations. During the different iterations,
+the patchset grew from a simple extension to a more serious refactor a modernization
+of the existing driver before landing the support for the new sensor.&lt;/p>
+&lt;p>The refactor and modernization changes included:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/5d5129b17f8315d317db01a3f6e050e8ca23952f">Fix broken datasheet links&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/5f0c359defea73c0ca27fb47a3a891abf2f5a504">Reorder local variables definitions following reverse xmas tree rule&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/2405f8cc8485d7c06fdd7b85a0df1a3febd076d6">Migrated driver codebase to use FIELD_GET, FIELD_SET and GENMASK macros&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/83cb40beaefaf59b224efdabecaac611b783da74">Simplified bmp280 calibration reading codepath&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/b00e805a47a86fb5890a1c2451e4d89043b1761d">Refactor driver initialization logic, unifying sensor initialization and extending parameters stored on chip_info struct&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/327b5c0512c18287162d0f12949aae41d64358b0">Fix possible DMA issues derived from using buffers stored in stack&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/18d1bb377023cad76e01b598da3da53da9fc36b7">Redorder i2c device tables declarations&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;p>The actual changes adding support for the BMP380 sensor:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/8d329309184d5824e44c6426bf878c5f1e1156e5">Core changes adding support for the BMP380 sensors&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://github.com/torvalds/linux/commit/10b40ffba2f95cdeed47b731c5ad5ecc73e140e8">Driver extension adding sampling frequency and IIR filter controls using sysfs ABI&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;h1 id="getting-the-patches-upstram">Getting the patches upstram&lt;/h1>
+&lt;p>There&amp;rsquo;s a lot on ink out there on how to preapre and send your patches to the
+kernel mailing lists. I&amp;rsquo;ve spent a few weeks scratching my head and still managed
+to botch my first patch submission. Don&amp;rsquo;t let this discourage you,
+the guides online and the people in the mailing list were really helpful.&lt;/p>
+&lt;p>On top of my head, some handy resources were:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a href="https://www.kernel.org/doc/html/v6.0/process/submitting-patches.html">Submitting patches: the essential guide to getting your code into the kernel&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://www.kernel.org/doc/html/v6.0/process/submit-checklist.html">Linux Kernel patch submission checklist¶&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://nickdesaulniers.github.io/blog/2017/05/16/submitting-your-first-patch-to-the-linux-kernel-and-responding-to-feedback/">Submitting Your First Patch to the Linux Kernel and Responding to Feedback&lt;/a>&lt;/li>
+&lt;li>&lt;a href="https://www.kernel.org/doc/html/v6.0/process/development-process.html">A guide to the Kernel Development Process&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;p>I don&amp;rsquo;t think I can say more than what&amp;rsquo;s written on those links, but on my experience
+I would add:&lt;/p>
+&lt;ol>
+&lt;li>When generating a patchset with &lt;strong>&lt;em>git format-patch&lt;/em>&lt;/strong> it can add for you &lt;code>In-Reply-To&lt;/code>
+headers using the &lt;code>--thread&lt;/code> flag that will link the patches later when they arrive
+to the mail list.&lt;/li>
+&lt;li>Adding the flag &lt;code>--cover-letter&lt;/code> to &lt;strong>&lt;em>git format-patch&lt;/em>&lt;/strong> will pregenerate a cover letter
+for you patchset where you can explain the changes and provide more insights.&lt;/li>
+&lt;li>Don&amp;rsquo;t forget to use the flag &lt;code>--base=&amp;lt;commit or branch&amp;gt;&lt;/code> generating patches to
+&lt;strong>&lt;em>git format-patch&lt;/em>&lt;/strong>. This will provide extra information to the maintainers about
+the base that your changes branched from.&lt;/li>
+&lt;li>When you&amp;rsquo;re generating a new version of the patches, &lt;strong>&lt;em>git format-patch&lt;/em>&lt;/strong> will add the new
+version prefix using the flag &lt;code>-v&amp;lt;number&amp;gt;&lt;/code>&lt;/li>
+&lt;li>It is preferible to send new patches versions without replying to previous versions
+to keep mail lists under control. It is common link to previous versions on the cover
+letter of the new version.&lt;/li>
+&lt;li>&lt;code>scripts/checkpatch.pl&lt;/code> can work in tamden with &lt;code>codespell&lt;/code> to detect typos in your patches.&lt;/li>
+&lt;li>Don&amp;rsquo;t forget to sign off your patches and include everyone involved in development using the
+&lt;code>Signed-off-by&lt;/code> and &lt;code>Co-developed-by&lt;/code> tags.&lt;/li>
+&lt;/ol>
+&lt;h1 id="next-steps">Next steps&lt;/h1>
+&lt;p>This was a really enriching experience. While working on this patches I stumbled across parts of
+the kernel I didn&amp;rsquo;t know beforehand.
+Although the patches have been accepted and are on their way toward kernel 6.1, the work doesn&amp;rsquo;t end here.
+I&amp;rsquo;ve got in my hands two new sensors deriving from the BMP380, the BMP390L and the BMP580
+and I plan to extend the driver again adding support for this two sensors very soon™️.&lt;/p>
+&lt;p>Now that first batch of features from rust-for-linux are expected to be merged
+in kernel 6.1, I would love to get my first taste at advanced rust porting the
+driver to rust.&lt;/p>
+&lt;h1 id="acknowledgments">Acknowledgments&lt;/h1>
+&lt;p>I would like to thank the patches reviewers, Jonathan Cameron, Andy Shevchenko and
+Krzysztof Kozlowski. Their feedback was essential to shape the patches. And also, apologies
+for managing to send three times in a row the patches separated instead than linked in a thread 😅&lt;/p></content></item></channel></rss>
