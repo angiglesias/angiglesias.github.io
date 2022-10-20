@@ -340,7 +340,7 @@ of the existing driver before landing the support for the new sensor.&lt;/p>
 &lt;li>&lt;a href="https://github.com/torvalds/linux/commit/8d329309184d5824e44c6426bf878c5f1e1156e5">Core changes adding support for the BMP380 sensors&lt;/a>&lt;/li>
 &lt;li>&lt;a href="https://github.com/torvalds/linux/commit/10b40ffba2f95cdeed47b731c5ad5ecc73e140e8">Driver extension adding sampling frequency and IIR filter controls using sysfs ABI&lt;/a>&lt;/li>
 &lt;/ul>
-&lt;h1 id="getting-the-patches-upstram">Getting the patches upstram&lt;/h1>
+&lt;h1 id="getting-the-patches-upstream">Getting the patches upstream&lt;/h1>
 &lt;p>There&amp;rsquo;s a lot on ink out there on how to preapre and send your patches to the
 kernel mailing lists. I&amp;rsquo;ve spent a few weeks scratching my head and still managed
 to botch my first patch submission. Don&amp;rsquo;t let this discourage you,
