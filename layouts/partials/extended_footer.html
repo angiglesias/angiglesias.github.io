@@ -1,8 +1,40 @@
 <footer class="social-footer">
-    <div class="social-footer-icons">
-      <a href="https://github.com/angiglesias" title="Github profile" target="_blank"
-        rel="noopener noreferrer"><i class="fa fa-github" aria-hidden="true"></i></a>
-      <a href="https://es.linkedin.com/in/%C3%A1ngel-iglesias-garc%C3%ADa-bb3020141/en" title="LinkedIn profile" target="_blank"
-        rel="noopener noreferrer"><i class="fa fa-linkedin" aria-hidden="true"></i></a>
-    </div>
+  <div class="social-footer-icons">
+    <a href="https://github.com/angiglesias" title="Github profile" target="_blank" rel="noopener noreferrer"><i
+        class="fa fa-github" aria-hidden="true"></i></a>
+    <a href="https://es.linkedin.com/in/%C3%A1ngel-iglesias-garc%C3%ADa-bb3020141/en" title="LinkedIn profile"
+      target="_blank" rel="noopener noreferrer"><i class="fa fa-linkedin" aria-hidden="true"></i></a>
+  </div>
 </footer>
+{{ $theme := resources.Get "js/theme.js" | js.Build | resources.Minify }}
+<script>
+  function setTheme(theme) {
+    if (theme === "dark") {
+      document.documentElement.classList.add('dark');
+      window.localStorage.setItem('theme', 'dark');
+      document.getElementById("theme-toggle").classList.add('sun');
+      document.getElementById("theme-toggle").classList.remove('moon');
+    } else {
+      document.documentElement.classList.add('light');
+      window.localStorage.setItem('theme', 'light');
+      document.getElementById("theme-toggle").classList.add('moon');
+      document.getElementById("theme-toggle").classList.remove('sun');
+    }
+  }
+
+  let theme = localStorage.getItem('theme');
+
+  theme = theme || (window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'dark' : 'light');
+
+  setTheme(theme);
+
+  function modeSwitcher() {
+    let currentMode = document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+    if (currentMode === "dark") {
+      setTheme('light');
+    } else {
+      setTheme('dark');
+    }
+  }
+</script>
