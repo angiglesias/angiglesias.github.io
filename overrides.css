@@ -1,0 +1,38 @@
+.post-cover {
+    margin: 40px auto;
+    /* max-width: 0%; */
+}
+
+.footer {
+    padding: 20px;
+}
+
+.footer__inner {
+    justify-content: center;
+    align-items: center;
+}
+
+.social-footer {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.social-footer-icons {
+    font-size: 24px;
+}
+
+.logo-cursor {
+    margin-left: 5px;
+    width: 9px;
+    height: 1.25rem;
+    color: inherit;
+    background-color: black;
+    animation: cursor 1s infinite;
+}
+
+@keyframes cursor {
+    0% { opacity: 0; }
+    50% { opacity: 1; }
+    100% { opacity: 0; }
+}
