@@ -1,4 +1,100 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on /home/angel</title><link>https://angiglesias.github.io/posts/</link><description>Recent content in Posts on /home/angel</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sat, 01 Oct 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://angiglesias.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Playing around with a BMP388 or my first Linux Kernel contribution</title><link>https://angiglesias.github.io/posts/bmp388/</link><pubDate>Sat, 01 Oct 2022 00:00:00 +0000</pubDate><guid>https://angiglesias.github.io/posts/bmp388/</guid><description>How it began I started looking with a friend in building a small, advanced GPS tracker to use in canoeing. We wanted something with low power consumption and a easy framework to develop a small proof-of-concept quickly. We discovered this awesome 4-in-one board from Ozzmaker that provided a full featured IMU.
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on /home/angel</title><link>https://angiglesias.github.io/posts/</link><description>Recent content in Posts on /home/angel</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 13 Nov 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://angiglesias.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Tired of pressing F-keys rebooting your PC for an update? Let's overengineer things</title><link>https://angiglesias.github.io/posts/dual-boot-galore/</link><pubDate>Sun, 13 Nov 2022 00:00:00 +0000</pubDate><guid>https://angiglesias.github.io/posts/dual-boot-galore/</guid><description>Dual booting with Windows without renoucing to secure boot et al This would have been easier by disabling secure boot on bios settings and calling it a day. But I wanted to keep bitlocker disk encryption and boot assurance using the tpm chip on my motherboard. Combining these settings, there&amp;rsquo;s only one way to boot Windows witHout ending in a recovering screen asking for your recovery key: booting in UEFI to the windows boot manager.</description><content>&lt;h1 id="dual-booting-with-windows-without-renoucing-to-secure-boot-_et-al_">Dual booting with Windows without renoucing to secure boot &lt;em>et al&lt;/em>&lt;/h1>
+&lt;p>This would have been easier by disabling secure boot on bios settings and calling it a day. But I wanted to keep bitlocker disk encryption and boot assurance using the tpm chip on my motherboard. Combining these settings, there&amp;rsquo;s only one way to boot Windows witHout ending in a recovering screen asking for your recovery key: booting in UEFI to the windows boot manager. If you try to select Windows from Grub, you&amp;rsquo;ll be greeted with a cyan screen asking for your recovery password.&lt;/p>
+&lt;p>Let&amp;rsquo;s say you usually boot to windows because some program (or game) you usually use is only available for that OS, so you kept Windows as the default boot option. This left booting Linux to the f-key pressing ritual to select the correct boot option. On the bright side, managing the windows update thingie won&amp;rsquo;t require pressing again f-keys to boot back again.&lt;/p>
+&lt;h1 id="introducing-linux-offline-updates">Introducing Linux offline updates&lt;/h1>
+&lt;p>I&amp;rsquo;ve using Fedora Linux on my work laptop for two years and loving the experience, but kept my desktop running KDE Neon (Ubuntu-based) because the nvidia gpu was &lt;em>kinda problematic&lt;/em> with the Wayland display manager. &lt;a href="https://www.phoronix.com/news/NVIDIA-470-Wayland-Friendly">This began to change in 2021&lt;/a> and nowadays, is more than feasible running a Wayland compositor on your nvidia gpu (yours truly wrote this on Fedora 36 running on an rtx30 series gpu).&lt;/p>
+&lt;p>Fedora upgrades are managed by pkgkit&amp;rsquo;s offline upgrades system by default. After looking under the hood of the upgrade system, this method is enabled by the systemd upgrading system as follows:&lt;/p>
+&lt;ul>
+&lt;li>Pkgkit downloads the updates to apply to your computer.&lt;/li>
+&lt;li>Pkgkit signals the availability of new updates to systemd (in our case, by establishing a symlink to the update directory in &lt;code>/system-update&lt;/code>).&lt;/li>
+&lt;li>After a reboot, systemd boots to the system-update target and runs the upgrade service(s) available to apply updates.&lt;/li>
+&lt;li>After finishing the upgrade, systemd will reboot to the default boot target (in our case, graphical.target)&lt;/li>
+&lt;/ul>
+&lt;p>In the setup described before, updating Fedora and carrying on means two f-key cycles and supervision of the update, at the least, to start the update in the first reboot selecting the Linux boot target. This can be reduced to one f-key cycle with the help of &lt;code>efibootmgr&lt;/code>. UEFI has the var &lt;code>bootnext&lt;/code> which allows setting which boot target to load on the next reboot. For example, on my desktop:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-shell" data-lang="shell">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672">[&lt;/span>angel@indigo2 ~&lt;span style="color:#f92672">]&lt;/span>$ efibootmgr
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>BootCurrent: &lt;span style="color:#ae81ff">0004&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>Timeout: &lt;span style="color:#ae81ff">1&lt;/span> seconds
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>BootOrder: 0000,0004
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>Boot0000* Windows Boot Manager
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>Boot0004* Fedora
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"># Usage&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>usage: efibootmgr &lt;span style="color:#f92672">[&lt;/span>options&lt;span style="color:#f92672">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -a | --active sets bootnum active
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -A | --inactive sets bootnum inactive
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -b | --bootnum XXXX modify BootXXXX &lt;span style="color:#f92672">(&lt;/span>hex&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -B | --delete-bootnum delete bootnum
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -c | --create create new variable bootnum and add to bootorder
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -C | --create-only create new variable bootnum and &lt;span style="color:#66d9ef">do&lt;/span> not add to bootorder
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -D | --remove-dups remove duplicate values from BootOrder
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -d | --disk disk &lt;span style="color:#f92672">(&lt;/span>defaults to /dev/sda&lt;span style="color:#f92672">)&lt;/span> containing loader
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -r | --driver Operate on Driver variables, not Boot Variables.
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -e | --edd &lt;span style="color:#f92672">[&lt;/span>1|3|-1&lt;span style="color:#f92672">]&lt;/span> force EDD 1.0 or 3.0 creation variables, or guess
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -E | --device num EDD 1.0 device number &lt;span style="color:#f92672">(&lt;/span>defaults to 0x80&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -g | --gpt force disk with invalid PMBR to be treated as GPT
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -i | --iface name create a netboot entry &lt;span style="color:#66d9ef">for&lt;/span> the named interface
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -l | --loader name &lt;span style="color:#f92672">(&lt;/span>defaults to &lt;span style="color:#e6db74">&amp;#34;\EFI\fedora\grub.efi&amp;#34;&lt;/span>&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -L | --label label Boot manager display label &lt;span style="color:#f92672">(&lt;/span>defaults to &lt;span style="color:#e6db74">&amp;#34;Linux&amp;#34;&lt;/span>&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -m | --mirror-below-4G t|f mirror memory below 4GB
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -M | --mirror-above-4G X percentage memory to mirror above 4GB
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -n | --bootnext XXXX set BootNext to XXXX &lt;span style="color:#f92672">(&lt;/span>hex&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -N | --delete-bootnext delete BootNext
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -o | --bootorder XXXX,YYYY,ZZZZ,... explicitly set BootOrder &lt;span style="color:#f92672">(&lt;/span>hex&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -O | --delete-bootorder delete BootOrder
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -p | --part part &lt;span style="color:#f92672">(&lt;/span>defaults to 1&lt;span style="color:#f92672">)&lt;/span> containing loader
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -q | --quiet be quiet
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -t | --timeout seconds set boot manager timeout waiting &lt;span style="color:#66d9ef">for&lt;/span> user input.
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -T | --delete-timeout delete Timeout.
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -u | --unicode | --UCS-2 handle extra args as UCS-2 &lt;span style="color:#f92672">(&lt;/span>default is ASCII&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -v | --verbose print additional information
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -V | --version &lt;span style="color:#66d9ef">return&lt;/span> version and exit
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -w | --write-signature write unique sig to MBR &lt;span style="color:#66d9ef">if&lt;/span> needed
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -y | --sysprep Operate on SysPrep variables, not Boot Variables.
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -@ | --append-binary-args file append extra args from file &lt;span style="color:#f92672">(&lt;/span>use &lt;span style="color:#e6db74">&amp;#34;-&amp;#34;&lt;/span> &lt;span style="color:#66d9ef">for&lt;/span> stdin&lt;span style="color:#f92672">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> -h | --help show help/usage
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>With &lt;code>efibootmgr -n 0004&lt;/code> Fedora is selected as the default boot target on the next reboot. Keeping this in mind, it seems like with this trick we can automate the update process to avoid pressing f-whatever on the next reboot to choose Linux.&lt;/p>
+&lt;h1 id="systemd-probable-cause-and-solution-for-all-problems">Systemd, (probable) cause and solution for all problems&lt;/h1>
+&lt;p>The first thing that comes to mind is using systemd services to set the nextboot efivar to reload Linux again after a reboot, as it is at the heart of the upgrade system.&lt;/p>
+&lt;p>With the previously discussed information in mind, it&amp;rsquo;s easy to write a service to set the efivar when the system is rebooted and an upgrade is ready to apply:&lt;/p>
+&lt;pre tabindex="0">&lt;code class="language-conf" data-lang="conf">[Unit]
+Description=Set UEFI bootnext to reload again linux when an offline upgrade is ready
+DefaultDependencies=no
+Before=shutdown.target
+ConditionPathExists=/system-update
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-nextboot-to-current
+[Install]
+WantedBy=shutdown.target
+&lt;/code>&lt;/pre>&lt;p>The most important things here are:&lt;/p>
+&lt;ul>
+&lt;li>The condition &lt;code>ConditionPathExists=/system-update&lt;/code> means the service is only executed when a system upgrade is signaled available to systemd.&lt;/li>
+&lt;li>The dependencies with the target &lt;code>shutdown&lt;/code> which set this service execution only happen when the system is being switched off.&lt;/li>
+&lt;/ul>
+&lt;p>On the other hand, booting back to Linux after the upgrade is finished, needs a little more consideration, as the system will reach the &lt;code>reboot&lt;/code> target after successfully finishing the &lt;code>system-update&lt;/code> one:&lt;/p>
+&lt;pre tabindex="0">&lt;code class="language-conf" data-lang="conf">[Unit]
+Description=Set UEFI nextboot to fedora after an system offline upgrade
+DefaultDependencies=no
+Requisite=system-update.target
+After=system-update.target
+Before=reboot.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-nextboot-to-current
+[Install]
+WantedBy=reboot.target
+&lt;/code>&lt;/pre>&lt;p>The most important things in this case are:&lt;/p>
+&lt;ul>
+&lt;li>The dependencies &lt;code>Requisite=system-update.target&lt;/code> and &lt;code>After=system-update.target&lt;/code> restrict the service execution only if &lt;code>system-update&lt;/code> target was reached successfully.&lt;/li>
+&lt;li>The dependencies with the &lt;code>reboot&lt;/code> target restrict the service execution only when the computer will be restarted.&lt;/li>
+&lt;/ul>
+&lt;p>In both cases, the script &lt;code>set-nextboot-to-current&lt;/code> is a simple bash script recovering the current booted target and setting UEFI&amp;rsquo;s nextboot var:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-shell" data-lang="shell">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#!/bin/sh
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>set -e
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>efibootmgr | grep &lt;span style="color:#e6db74">&amp;#34;BootCurrent&amp;#34;&lt;/span> | awk &lt;span style="color:#e6db74">&amp;#39;{print $2}&amp;#39;&lt;/span> | xargs -I &lt;span style="color:#f92672">{}&lt;/span> efibootmgr -n &lt;span style="color:#f92672">{}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>So that&amp;rsquo;s it, a little bit of overengineering to avoid pressing f-something a keeping an eye on while the PC is updating.&lt;/p></content></item><item><title>Playing around with a BMP388 or my first Linux Kernel contribution</title><link>https://angiglesias.github.io/posts/bmp388/</link><pubDate>Sat, 01 Oct 2022 00:00:00 +0000</pubDate><guid>https://angiglesias.github.io/posts/bmp388/</guid><description>How it began I started looking with a friend in building a small, advanced GPS tracker to use in canoeing. We wanted something with low power consumption and a easy framework to develop a small proof-of-concept quickly. We discovered this awesome 4-in-one board from Ozzmaker that provided a full featured IMU.
 An IMU, Inertial Measurement Unit is a device used to record navigational information that can be used later to compute the position of a body.</description><content>&lt;h1 id="how-it-began">How it began&lt;/h1>
 &lt;p>I started looking with a friend in building a small, advanced GPS tracker to use in canoeing.
 We wanted something with low power consumption and a easy framework to develop a small proof-of-concept
