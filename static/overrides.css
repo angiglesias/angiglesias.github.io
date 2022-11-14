@@ -12,6 +12,10 @@
     align-items: center;
 }
 
+.pagination {
+    color: #0F0F0F;
+}
+
 .social-footer {
     display: inline-flex;
     justify-content: center;
